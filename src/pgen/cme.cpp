@@ -49,7 +49,7 @@ Real calc_v_inner(ParameterInput *pin);
 Real calc_b1_inner(ParameterInput *pin);
 Real calc_b2_inner(ParameterInput *pin, Real b1, Real v_inner);
 Real calc_n_inner(ParameterInput *pin, Real v_inner);
-Real calc_energy_inner(ParameterInput *pin, Real n_inner);
+Real calc_energy_inner(ParameterInput *pin, Real n_inner, Real gamma);
 
 Real threshold;
 
@@ -77,76 +77,84 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
+  Real gamma = peos->GetGamma();
   // would need to change this if not cylindrical
   Real inner_radius = pin->GetReal("mesh", "x1min");
   Real v_inner = calc_v_inner(pin);
   Real b1 = calc_b1_inner(pin);
   Real b2 = calc_b2_inner(pin, b1, v_inner);
+  Real b3 = 0.0;
   Real n_inner = calc_n_inner(pin, v_inner);
-  Real e_inner = calc_energy_inner(pin, n_inner);
+  Real e_inner = calc_energy_inner(pin, n_inner, gamma);
   // Real rout = pin->GetReal("problem", "radius");
   // Real rin  = rout - pin->GetOrAddReal("problem", "ramp", 0.0);
   // Real pa   = pin->GetOrAddReal("problem", "pamb", 1.0);
-  Real da   = pin->GetOrAddReal("problem", "damb", 1.0);
+  // Real da   = pin->GetOrAddReal("problem", "damb", 1.0);
   // Real prat = pin->GetReal("problem", "prat");
   // Real drat = pin->GetOrAddReal("problem", "drat", 1.0);
   Real b0, angle;
-  if (MAGNETIC_FIELDS_ENABLED) {
-    b0 = pin->GetReal("problem", "b0");
-    angle = (PI/180.0)*pin->GetReal("problem", "angle");
-  }
-  Real gamma = peos->GetGamma();
-  Real gm1 = gamma - 1.0;
-
-  // get coordinates of center of cme, and convert to Cartesian if necessary
-  // Real x1_0   = pin->GetOrAddReal("problem", "x1_0", 0.0);
-  // Real x2_0   = pin->GetOrAddReal("problem", "x2_0", 0.0);
-  // Real x3_0   = pin->GetOrAddReal("problem", "x3_0", 0.0);
-  // Real x0, y0, z0;
-  // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-  //   x0 = x1_0;
-  //   y0 = x2_0;
-  //   z0 = x3_0;
-  // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-  //   x0 = x1_0*std::cos(x2_0);
-  //   y0 = x1_0*std::sin(x2_0);
-  //   z0 = x3_0;
-  // } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-  //   x0 = x1_0*std::sin(x2_0)*std::cos(x3_0);
-  //   y0 = x1_0*std::sin(x2_0)*std::sin(x3_0);
-  //   z0 = x1_0*std::cos(x2_0);
-  // } else {
-  //   // Only check legality of COORDINATE_SYSTEM once in this function
-  //   std::stringstream msg;
-  //   msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
-  //       << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
-  //   ATHENA_ERROR(msg);
+  // if (MAGNETIC_FIELDS_ENABLED) {
+  //   b0 = pin->GetReal("problem", "b0");
+  //   angle = (PI/180.0)*pin->GetReal("problem", "angle");
   // }
+  
+  // Real gm1 = gamma - 1.0;
+
+  // magnetic field
+  b0 = std::sqrt( SQR(b1) + SQR(b2) + SQR(b3));
+  angle = (PI/180.0)*b2; //(PI/180.0)*0.0; //pin->GetReal("problem", "angle");
+  std::cout << "b0: " << b0 << " angle: " << angle << "\n";
+  // get coordinates of center of cme, and convert to Cartesian if necessary
+  // should all be zero for now
+  Real x1_0   = pin->GetOrAddReal("problem", "x1_0", 0.0);
+  Real x2_0   = pin->GetOrAddReal("problem", "x2_0", 0.0);
+  Real x3_0   = pin->GetOrAddReal("problem", "x3_0", 0.0);
+  Real x0, y0, z0;
+  if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+    x0 = x1_0;
+    y0 = x2_0;
+    z0 = x3_0;
+  } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+    x0 = x1_0*std::cos(x2_0);
+    y0 = x1_0*std::sin(x2_0);
+    z0 = x3_0;
+  } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+    x0 = x1_0*std::sin(x2_0)*std::cos(x3_0);
+    y0 = x1_0*std::sin(x2_0)*std::sin(x3_0);
+    z0 = x1_0*std::cos(x2_0);
+  } else {
+    // Only check legality of COORDINATE_SYSTEM once in this function
+    std::stringstream msg;
+    msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
+        << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
+    ATHENA_ERROR(msg);
+  }
 
   // setup uniform ambient medium with spherical over-pressured region
   // Modifies density, and energy (non-barotropic eos and relativistic dynamics) 
   for (int k=ks; k<=ke; k++) {
     for (int j=js; j<=je; j++) {
       for (int i=is; i<=ie; i++) {
-        // Real rad;
-        // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-        //   Real x = pcoord->x1v(i);
-        //   Real y = pcoord->x2v(j);
-        //   Real z = pcoord->x3v(k);
-        //   rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
-        // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-        //   Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
-        //   Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
-        //   Real z = pcoord->x3v(k);
-        //   rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
-        // } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
-        //   Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
-        //   Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
-        //   Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
-        //   rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
-        // }
+        Real rad;
+        if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+          Real x = pcoord->x1v(i);
+          Real y = pcoord->x2v(j);
+          Real z = pcoord->x3v(k);
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+        } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+          Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+          Real z = pcoord->x3v(k);
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+        } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+          Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+          Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+          Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+        }
 
-        Real den = da; // ambient density
+        // ambient density
+        Real den = n_inner * SQR((inner_radius / rad));
         // modify density inside sphere
         //commenting out for now
         // if (rad < rout) {
@@ -160,13 +168,16 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         // }
 
         phydro->u(IDN,k,j,i) = den;
-        phydro->u(IM1,k,j,i) = 0.0;
-        phydro->u(IM2,k,j,i) = 0.0;
+        // should this be a constant momentum term 
+        // or a function of the inner density
+        phydro->u(IM1,k,j,i) = v_inner * n_inner;
+        // phydro->u(IM1,k,j,i) = v_inner * den;
+        phydro->u(IM2,k,j,i) = 0.0; // no tangential velocity at beginning
         phydro->u(IM3,k,j,i) = 0.0;
 
         
         if (NON_BAROTROPIC_EOS) {
-          Real pres = pa;
+          // Real pres = pa;
           // modify energy, commenting out for now
           // if (rad < rout) {
           //   if (rad < rin) {
@@ -177,7 +188,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           //     pres = std::exp(log_pres);
           //   }
           // }
-          phydro->u(IEN,k,j,i) = pres/gm1;
+          // phydro->u(IEN,k,j,i) = pres/gm1;
+          phydro->u(IEN,k,j,i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+          
 
           if (RELATIVISTIC_DYNAMICS) {
             std::stringstream msg;
@@ -197,16 +210,29 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie+1; ++i) {
+          Real rad;
           if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-            pfield->b.x1f(k,j,i) = b0 * std::cos(angle);
+            Real x = pcoord->x1v(i);
+            Real y = pcoord->x2v(j);
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+            pfield->b.x1f(k,j,i) = b0 * SQR((inner_radius/rad)) * std::cos(angle);
           } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
             Real phi = pcoord->x2v(j);
             pfield->b.x1f(k,j,i) =
-                b0 * (std::cos(angle) * std::cos(phi) + std::sin(angle) * std::sin(phi));
-          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+                b0 * SQR((inner_radius/rad)) * (std::cos(angle) * std::cos(phi) + std::sin(angle) * std::sin(phi));
+          } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+            Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+            Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
             Real theta = pcoord->x2v(j);
             Real phi = pcoord->x3v(k);
-            pfield->b.x1f(k,j,i) = b0 * std::abs(std::sin(theta))
+            pfield->b.x1f(k,j,i) = b0 * SQR((inner_radius/rad)) * std::abs(std::sin(theta))
                                    * (std::cos(angle) * std::cos(phi)
                                       + std::sin(angle) * std::sin(phi));
           }
@@ -216,16 +242,29 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je+1; ++j) {
         for (int i=is; i<=ie; ++i) {
+          Real rad;
           if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-            pfield->b.x2f(k,j,i) = b0 * std::sin(angle);
+            Real x = pcoord->x1v(i);
+            Real y = pcoord->x2v(j);
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+            pfield->b.x2f(k,j,i) = b0 * SQR((inner_radius/rad)) * std::sin(angle);
           } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
             Real phi = pcoord->x2v(j);
             pfield->b.x2f(k,j,i) =
-                b0 * (std::sin(angle) * std::cos(phi) - std::cos(angle) * std::sin(phi));
-          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+                b0 * SQR((inner_radius/rad)) * (std::sin(angle) * std::cos(phi) - std::cos(angle) * std::sin(phi));
+          } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+            Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+            Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
             Real theta = pcoord->x2v(j);
             Real phi = pcoord->x3v(k);
-            pfield->b.x2f(k,j,i) = b0 * std::cos(theta)
+            pfield->b.x2f(k,j,i) = b0 * SQR((inner_radius/rad)) * std::cos(theta)
                                    * (std::cos(angle) * std::cos(phi)
                                       + std::sin(angle) * std::sin(phi));
             if (std::sin(theta) < 0.0)
@@ -237,13 +276,19 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int k=ks; k<=ke+1; ++k) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie; ++i) {
-          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0
-              || std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          Real rad;
+          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
             pfield->b.x3f(k,j,i) = 0.0;
-          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+          } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            pfield->b.x3f(k,j,i) = 0.0;
+          } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+            Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+            Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
             Real phi = pcoord->x3v(k);
             pfield->b.x3f(k,j,i) =
-                b0 * (std::sin(angle) * std::cos(phi) - std::cos(angle) * std::sin(phi));
+                b0 * SQR((inner_radius/rad)) * (std::sin(angle) * std::cos(phi) - std::cos(angle) * std::sin(phi));
           }
         }
       }
@@ -251,7 +296,24 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie; ++i) {
-          phydro->u(IEN,k,j,i) += 0.5*b0*b0;
+          Real rad;
+          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+            Real x = pcoord->x1v(i);
+            Real y = pcoord->x2v(j);
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+            Real z = pcoord->x3v(k);
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          } else { // if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0)
+            Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+            Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+            Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          }
+          phydro->u(IEN,k,j,i) += 0.5*b0*b0*std::pow((inner_radius/rad),4.0);
         }
       }
     }
@@ -581,7 +643,7 @@ int RefinementCondition(MeshBlock *pmb) {
 // convert velocity to inner boundary velocity
 Real calc_v_inner(ParameterInput *pin) {
   Real v_measure = pin->GetReal("problem", "v_measure");
-  Real v_measure_extra = pin->GetReal("problem", "v_measure_extra");
+  Real v_measure_extra = pin->GetOrAddReal("problem", "v_measure_extra", 1.0);
   Real vo = pin->GetReal("problem", "vo");
   Real v_inner = (std::sqrt(v_measure / 430.7) * 0.8231
                   * v_measure_extra * v_measure * 1000.0
@@ -614,7 +676,7 @@ Real calc_b2_inner(ParameterInput *pin, Real b1, Real v_inner) {
   Real omega = pin->GetReal("problem", "omega_sun");
   Real AU = pin->GetReal("problem", "AU");
   Real vo = pin->GetReal("problem", "vo");
-  Real b_extra = pin->GetReal("problem", "b_measure_extra");
+  Real b_extra = pin->GetOrAddReal("problem", "b_measure_extra", 1.0);
 
   Real ratio_inner = (omega * AU * min_radius) / ( v_inner * vo);
   Real b2 = -1.0* b1 * ratio_inner * b_extra;
@@ -634,11 +696,11 @@ Real calc_n_inner(ParameterInput *pin, Real v_inner) {
 }
 
 // convert density and temperature to energy density 
-Real calc_energy_inner(ParameterInput *pin, Real n_inner) {
+Real calc_energy_inner(ParameterInput *pin, Real n_inner, Real gamma) {
   Real min_radius = pin->GetReal("mesh", "x1min");
   Real r_meas = pin->GetReal("problem", "r_measure");
   Real T_measure = pin->GetReal("problem", "T_measure");
-  Real gamma = peos->GetGamma();
+  // Real gamma = peos->GetGamma();
 
   // convert temperature to inner boundary temperature
   Real k_inner = T_measure * pow((r_meas/min_radius), (4.0/3.0));
