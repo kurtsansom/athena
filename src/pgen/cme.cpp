@@ -321,27 +321,72 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 }
 
 //! User-defined boundary Conditions: sets solution in ghost zones to initial values
-void CMEInnerX1(MeshBlock *pmb, Coordinates *pco,
+void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
                  AthenaArray<Real> &prim, FaceField &b,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
-  Real rad(0.0), phi(0.0), z(0.0);
-  Real vel;
+  Real rad(0.0);
+  // Real x1_0   = pin->GetOrAddReal("problem", "x1_0", 0.0);
+  // Real x2_0   = pin->GetOrAddReal("problem", "x2_0", 0.0);
+  // Real x3_0   = pin->GetOrAddReal("problem", "x3_0", 0.0);
+  Real x0(0.0), y0(0.0), z0(0.0);
+  // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+  //   x0 = x1_0;
+  //   y0 = x2_0;
+  //   z0 = x3_0;
+  // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+  //   x0 = x1_0*std::cos(x2_0);
+  //   y0 = x1_0*std::sin(x2_0);
+  //   z0 = x3_0;
+  // } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+  //   x0 = x1_0*std::sin(x2_0)*std::cos(x3_0);
+  //   y0 = x1_0*std::sin(x2_0)*std::sin(x3_0);
+  //   z0 = x1_0*std::cos(x2_0);
+  // } else {
+  //   // Only check legality of COORDINATE_SYSTEM once in this function
+  //   std::stringstream msg;
+  //   msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
+  //       << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
+  //   ATHENA_ERROR(msg);
+  // }
   // OrbitalVelocityFunc &vK = pmb->porb->OrbitalVelocity;
-  if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+  if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
     for (int k=kl; k<=ku; ++k) {
       for (int j=jl; j<=ju; ++j) {
         for (int i=1; i<=ngh; ++i) {
-          // GetCylCoord(pco,rad,phi,z,il-i,j,k);
-          // prim(IDN,k,j,il-i) = DenProfileCyl(rad,phi,z);
-          // vel = VelProfileCyl(rad,phi,z);
-          // if (pmb->porb->orbital_advection_defined)
-          //   vel -= vK(pmb->porb, pco->x1v(il-i), pco->x2v(j), pco->x3v(k));
-          // prim(IM1,k,j,il-i) = 0.0;
-          // prim(IM2,k,j,il-i) = vel;
-          // prim(IM3,k,j,il-i) = 0.0;
-          // if (NON_BAROTROPIC_EOS)
-          //   prim(IEN,k,j,il-i) = PoverR(rad, phi, z)*prim(IDN,k,j,il-i);
+          Real x = pcoord->x1v(i);
+          Real y = pcoord->x2v(j);
+          Real z = pcoord->x3v(k);
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          // update boundaries
+          Real den = n_inner * SQR((inner_radius / rad));
+          prim(IDN,k,j,il-i) = den;
+          prim(IM1,k,j,il-i) = v_inner * n_inner;;
+          prim(IM2,k,j,il-i) = 0.0;
+          prim(IM3,k,j,il-i) = 0.0;
+          if (NON_BAROTROPIC_EOS) {
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+          }
+        }
+      }
+    }
+  } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+    for (int k=kl; k<=ku; ++k) {
+      for (int j=jl; j<=ju; ++j) {
+        for (int i=1; i<=ngh; ++i) {
+          Real x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+          Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+          Real z = pcoord->x3v(k);
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          // update boundaries
+          Real den = n_inner * SQR((inner_radius / rad));
+          prim(IDN,k,j,il-i) = den;
+          prim(IM1,k,j,il-i) = v_inner * n_inner;;
+          prim(IM2,k,j,il-i) = 0.0;
+          prim(IM3,k,j,il-i) = 0.0;
+          if (NON_BAROTROPIC_EOS) {
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+          }
         }
       }
     }
@@ -349,16 +394,19 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pco,
     for (int k=kl; k<=ku; ++k) {
       for (int j=jl; j<=ju; ++j) {
         for (int i=1; i<=ngh; ++i) {
-          // GetCylCoord(pco,rad,phi,z,il-i,j,k);
-          // prim(IDN,k,j,il-i) = DenProfileCyl(rad,phi,z);
-          // vel = VelProfileCyl(rad,phi,z);
-          // if (pmb->porb->orbital_advection_defined)
-          //   vel -= vK(pmb->porb, pco->x1v(il-i), pco->x2v(j), pco->x3v(k));
-          // prim(IM1,k,j,il-i) = 0.0;
-          // prim(IM2,k,j,il-i) = 0.0;
-          // prim(IM3,k,j,il-i) = vel;
-          // if (NON_BAROTROPIC_EOS)
-          //   prim(IEN,k,j,il-i) = PoverR(rad, phi, z)*prim(IDN,k,j,il-i);
+          Real x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
+          Real y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
+          Real z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+          rad = std::sqrt(SQR(x - x0) + SQR(y - y0) + SQR(z - z0));
+          // update boundaries
+          Real den = n_inner * SQR((inner_radius / rad));
+          prim(IDN,k,j,il-i) = den;
+          prim(IM1,k,j,il-i) = v_inner * n_inner;;
+          prim(IM2,k,j,il-i) = 0.0;
+          prim(IM3,k,j,il-i) = 0.0;
+          if (NON_BAROTROPIC_EOS) {
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+          }
         }
       }
     }
