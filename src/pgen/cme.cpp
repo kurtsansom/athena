@@ -51,9 +51,15 @@ Real calc_b2_inner(ParameterInput *pin, Real b1, Real v_inner);
 Real calc_n_inner(ParameterInput *pin, Real v_inner);
 Real calc_energy_inner(ParameterInput *pin, Real n_inner, Real gamma);
 
-Real threshold;
-
 int RefinementCondition(MeshBlock *pmb);
+
+// namespaced variables, i.e. globals
+// should be turned into a class with setters and getters
+namespace {
+Real threshold;
+Real v_inner, n_inner, e_inner;
+Real inner_radius, gamma_param;
+} // namespace
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (adaptive) {
@@ -77,15 +83,15 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
-  Real gamma = peos->GetGamma();
+  gamma_param = peos->GetGamma();
   // would need to change this if not cylindrical
-  Real inner_radius = pin->GetReal("mesh", "x1min");
-  Real v_inner = calc_v_inner(pin);
+  inner_radius = pin->GetReal("mesh", "x1min");
+  v_inner = calc_v_inner(pin);
   Real b1 = calc_b1_inner(pin);
   Real b2 = calc_b2_inner(pin, b1, v_inner);
   Real b3 = 0.0;
-  Real n_inner = calc_n_inner(pin, v_inner);
-  Real e_inner = calc_energy_inner(pin, n_inner, gamma);
+  n_inner = calc_n_inner(pin, v_inner);
+  e_inner = calc_energy_inner(pin, n_inner, gamma_param);
   // Real rout = pin->GetReal("problem", "radius");
   // Real rin  = rout - pin->GetOrAddReal("problem", "ramp", 0.0);
   // Real pa   = pin->GetOrAddReal("problem", "pamb", 1.0);
@@ -98,7 +104,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   //   angle = (PI/180.0)*pin->GetReal("problem", "angle");
   // }
   
-  // Real gm1 = gamma - 1.0;
+  // Real gm1 = gamma_param - 1.0;
 
   // magnetic field
   b0 = std::sqrt( SQR(b1) + SQR(b2) + SQR(b3));
@@ -189,7 +195,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           //   }
           // }
           // phydro->u(IEN,k,j,i) = pres/gm1;
-          phydro->u(IEN,k,j,i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+          phydro->u(IEN,k,j,i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma_param);
           
 
           if (RELATIVISTIC_DYNAMICS) {
@@ -326,6 +332,8 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
   Real rad(0.0);
+  // Real v_inner = calc_v_inner(pin);
+  // Real n_inner = calc_n_inner(pin, v_inner);
   // Real x1_0   = pin->GetOrAddReal("problem", "x1_0", 0.0);
   // Real x2_0   = pin->GetOrAddReal("problem", "x2_0", 0.0);
   // Real x3_0   = pin->GetOrAddReal("problem", "x3_0", 0.0);
@@ -365,7 +373,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
           prim(IM2,k,j,il-i) = 0.0;
           prim(IM3,k,j,il-i) = 0.0;
           if (NON_BAROTROPIC_EOS) {
-            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma_param);
           }
         }
       }
@@ -385,7 +393,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
           prim(IM2,k,j,il-i) = 0.0;
           prim(IM3,k,j,il-i) = 0.0;
           if (NON_BAROTROPIC_EOS) {
-            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma_param);
           }
         }
       }
@@ -405,7 +413,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
           prim(IM2,k,j,il-i) = 0.0;
           prim(IM3,k,j,il-i) = 0.0;
           if (NON_BAROTROPIC_EOS) {
-            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma);
+            prim(IEN,k,j,il-i) = e_inner * std::pow((inner_radius / rad), 2.0*gamma_param);
           }
         }
       }
@@ -689,15 +697,16 @@ int RefinementCondition(MeshBlock *pmb) {
 }
 
 // convert velocity to inner boundary velocity
+// empirical formulation
 Real calc_v_inner(ParameterInput *pin) {
   Real v_measure = pin->GetReal("problem", "v_measure");
   Real v_measure_extra = pin->GetOrAddReal("problem", "v_measure_extra", 1.0);
   Real vo = pin->GetReal("problem", "vo");
-  Real v_inner = (std::sqrt(v_measure / 430.7) * 0.8231
+  Real v_in = (std::sqrt(v_measure / 430.7) * 0.8231
                   * v_measure_extra * v_measure * 1000.0
                  )
                   / vo;
-  return v_inner;
+  return v_in;
 }
 
 // convert b1 magnetic field to inner boundary 
@@ -739,8 +748,8 @@ Real calc_n_inner(ParameterInput *pin, Real v_inner) {
   Real n_measure = pin->GetReal("problem", "n_measure");
   Real vo = pin->GetReal("problem", "vo");
 
-  Real n_inner = (n_measure * SQR((r_meas / min_radius)) * v_measure * 1000.0) / (v_inner * vo);
-  return n_inner;
+  Real n_in = (n_measure * SQR((r_meas / min_radius)) * v_measure * 1000.0) / (v_inner * vo);
+  return n_in;
 }
 
 // convert density and temperature to energy density 
