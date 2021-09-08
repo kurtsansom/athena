@@ -339,7 +339,8 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
   Real rad, rho, rho_0, x, y, z;
   Real grav_force, f1, f2, f3;
 
-  rho_0 = x_0 + y_0;
+  // rho is the radius direction in cylindrical coordinates
+  rho_0 = std::sqrt(SQR(x_0) + SQR(y_0));
   for (int k=pmb->ks; k<=pmb->ke; ++k) {
     for (int j=pmb->js; j<=pmb->je; ++j) {
       for (int i=pmb->is; i<=pmb->ie; ++i) {
@@ -351,7 +352,7 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
           x = pmb->pcoord->x1v(i)*std::cos(pmb->pcoord->x2v(j));
           y = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j));
           z = pmb->pcoord->x3v(k);
-          rho = x + y;
+          rho = std::sqrt(SQR(x) + SQR(y));
         } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
           x = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j))*std::cos(pmb->pcoord->x3v(k));
           y = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j))*std::sin(pmb->pcoord->x3v(k));
@@ -366,6 +367,7 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
           f2 = dt*grav_force * (y-y_0) / rad;
           f3 = dt*grav_force * (z-z_0) / rad;
         } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          // not 100% sure this is correct
           f1 = dt*grav_force * (rho-rho_0) / rad;
           f2 = 0.0;
           f3 = dt*grav_force * (z-z_0) / rad;
