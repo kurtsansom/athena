@@ -40,7 +40,13 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pco,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
+void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+              AthenaArray<Real> &cons_scalar);
+
 Real calc_v1_inner(ParameterInput *pin);
+Real calc_GM_sun(ParameterInput *pin);
 Real calc_b1_inner(ParameterInput *pin);
 Real calc_b2_inner(ParameterInput *pin, Real b1, Real v1_inner);
 Real calc_n_inner(ParameterInput *pin, Real v1_inner);
@@ -58,6 +64,8 @@ Real inner_radius, gamma_param;
 Real m_p;
 Real b1, b2, b3;
 Real x_0, y_0, z_0;
+Real GM_norm;
+bool sun_gravity;
 } // namespace
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
@@ -69,6 +77,14 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, CMEInnerX1);
   }
+
+  // Enroll user-defined physical source terms
+  // external gravitational potential
+  sun_gravity = pin->GetOrAddBoolean("problem", "enable_gravity",false);
+  if (sun_gravity) {
+    EnrollUserExplicitSourceFunction(SunGravity);
+  }
+  
   return;
 }
 
@@ -85,7 +101,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   m_p = pin->GetOrAddReal("problem", "m_p", 1.67E-27);
   Real omega = pin->GetOrAddReal("problem", "omega_sun", 2.87e-6);
   v1_inner = calc_v1_inner(pin);
-  v2_inner = omega; // create calc for v2 and v3
+  v2_inner = 0.0; //omega; // create calc for v2 and v3
   v3_inner = 0.0;
   b1 = calc_b1_inner(pin);
   b2 = calc_b2_inner(pin, b1, v1_inner);
@@ -132,6 +148,12 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
         << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
     ATHENA_ERROR(msg);
+  }
+
+  // calculate normalized gravity potential
+  if (sun_gravity) {
+      GM_norm = calc_GM_sun(pin);
+      std::cout << GM_norm << " yo" << std::endl;
   }
 
   // setup uniform ambient medium
@@ -304,6 +326,70 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       }
     }
   }
+}
+
+// add gravity potential term
+// currently defined spherically for the sun at the center of the simulation
+// converts to correct coordinates
+void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+              AthenaArray<Real> &cons_scalar) {
+
+  Real rad, rho, rho_0, x, y, z;
+  Real grav_force, f1, f2, f3;
+
+  rho_0 = x_0 + y_0;
+  for (int k=pmb->ks; k<=pmb->ke; ++k) {
+    for (int j=pmb->js; j<=pmb->je; ++j) {
+      for (int i=pmb->is; i<=pmb->ie; ++i) {
+        if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+          x = pmb->pcoord->x1v(i);
+          y = pmb->pcoord->x2v(j);
+          z = pmb->pcoord->x3v(k);
+        } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          x = pmb->pcoord->x1v(i)*std::cos(pmb->pcoord->x2v(j));
+          y = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j));
+          z = pmb->pcoord->x3v(k);
+          rho = x + y;
+        } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+          x = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j))*std::cos(pmb->pcoord->x3v(k));
+          y = pmb->pcoord->x1v(i)*std::sin(pmb->pcoord->x2v(j))*std::sin(pmb->pcoord->x3v(k));
+          z = pmb->pcoord->x1v(i)*std::cos(pmb->pcoord->x2v(j)); 
+        }
+
+        rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
+        grav_force = - GM_norm / SQR(rad) * cons(IDN,k,j,i);
+
+        if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+          f1 = dt*grav_force * (x-x_0) / rad;
+          f2 = dt*grav_force * (y-y_0) / rad;
+          f3 = dt*grav_force * (z-z_0) / rad;
+        } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          f1 = dt*grav_force * (rho-rho_0) / rad;
+          f2 = 0.0;
+          f3 = dt*grav_force * (z-z_0) / rad;
+        } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+          f1 = dt*grav_force;
+          f2 = 0.0;
+          f3 = 0.0;
+        }
+
+        cons(IM1,k,j,i) += f1;
+        cons(IM2,k,j,i) += f2;
+        cons(IM3,k,j,i) += f3;
+
+        // multiply gravitational potential by smoothing function
+        // cons(IM3,k,j,i) -= dt*den*SQR(Omega_0)*x3*fsmooth;
+        if (NON_BAROTROPIC_EOS) {
+          cons(IEN,k,j,i) += dt*prim(IDN,k,j,i) * (prim(IVX,k,j,i) * f1
+                                                   + prim(IVY,k,j,i) * f2
+                                                   + prim(IVZ,k,j,i) * f3);
+        }
+      }
+    }
+  }
+  return;
 }
 
 //! User-defined boundary Conditions: sets solution in ghost zones to initial values
@@ -500,6 +586,15 @@ int RefinementCondition(MeshBlock *pmb) {
   if (maxeps > threshold) return 1;
   if (maxeps < 0.25*threshold) return -1;
   return 0;
+}
+
+// get normalized gravitational constant
+Real calc_GM_sun(ParameterInput *pin) {
+  Real AU = pin->GetReal("problem", "AU");
+  Real t_o = pin->GetReal("problem", "t_o");
+  Real GM_sun = pin->GetOrAddReal("problem", "GM_sun", 1.32712440018e20);
+  Real GM_0 = GM_sun * SQR(t_o) / std::pow(AU,3);
+  return GM_0;
 }
 
 // convert velocity to inner boundary velocity
