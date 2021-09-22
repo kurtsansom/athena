@@ -255,7 +255,7 @@ def main(**kwargs):
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
 
-    fig.colorbar(im)
+    cb = fig.colorbar(im)
 
     if not kwargs['fill']:
         ax.set_aspect('equal')
@@ -264,6 +264,8 @@ def main(**kwargs):
         fig.show()
     else:
         fig.savefig(kwargs['output_file'], bbox_inches='tight')
+
+    plt.close(fig)
 
 
 # Execute main function
