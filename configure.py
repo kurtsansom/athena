@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # ---------------------------------------------------------------------------------------
 # configure.py: Athena++ configuration script in python. Original version by CJW.
 #
