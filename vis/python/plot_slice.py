@@ -79,6 +79,30 @@ def main(**kwargs):
     else:
         data = athena_read.athdf(kwargs['data_file'], quantities=quantities, level=level, num_ghost=kwargs['num_ghost'])
 
+    if kwargs["exclude_ghost"]:
+        data_shape = data[kwargs['quantity']].shape
+        min_idx = np.empty_like(data_shape)
+        max_idx = np.empty_like(data_shape)
+        for idx, N_dir in enumerate(data_shape):
+            if N_dir < 2*kwargs['num_ghost']:
+                min_idx[idx] = 0
+                max_idx[idx] = N_dir
+            else:
+                min_idx[idx] = kwargs['num_ghost']
+                max_idx[idx] = N_dir - kwargs['num_ghost']
+
+
+        data[kwargs['quantity']]= data[kwargs['quantity']][min_idx[0]:max_idx[0],
+                                       min_idx[1]:max_idx[1],
+                                       min_idx[2]:max_idx[2]]
+        # face values are one larger
+        data['x1f'] = data['x1f'][min_idx[2]:max_idx[2]+1]
+        data['x1v'] = data['x1v'][min_idx[2]:max_idx[2]]
+        data['x2f'] = data['x2f'][min_idx[1]:max_idx[1]+1]
+        data['x2v'] = data['x2v'][min_idx[1]:max_idx[1]]
+        data['x3f'] = data['x3f'][min_idx[0]:max_idx[0]+1]
+        data['x3v'] = data['x3v'][min_idx[0]:max_idx[0]]
+        # return
     # Check that coordinates work with user choices
     coordinates = data['Coordinates'].decode('utf-8', 'replace')
     ave_or_sum = kwargs['average'] or kwargs['sum'] or kwargs['stream_average']
@@ -173,6 +197,11 @@ def main(**kwargs):
             vals = vals[:, index, :]
         else:
             vals = vals[index, :, :]
+            if kwargs['density_norm'] and kwargs['quantity'] in ["rho", "dens"]:
+                print(vals.shape, xv.shape)
+                # vals = vals * xv**2
+                vals = vals / (vals.T * xv[:, None]**2).T
+
 
     # Extract vector data
     if kwargs['stream'] is not None:
@@ -228,6 +257,8 @@ def main(**kwargs):
     if projection_type == 'polar':
         # switch axis for radial and azimuthal
         im = ax.pcolormesh(y_grid, x_grid, vals, cmap=kwargs['colormap'], norm=norm)
+        ax.set_rorigin(-x_grid.min())
+        ax.grid(True)
     else:
         im = ax.pcolormesh(x_grid, y_grid, vals, cmap=kwargs['colormap'], norm=norm)
 
@@ -353,6 +384,13 @@ if __name__ == '__main__':
     parser.add_argument('--num_ghost',
                         type=int,
                         default=0,
-                        help=('Include number of ghost cells in each direction'))
+                        help='Include number of ghost cells in each direction')
+    parser.add_argument('--exclude_ghost',
+                        action='store_true',
+                        help='Exclude ghost cells from plot')
+    parser.add_argument('--density_norm',
+                        action='store_true',
+                        help='enable density normalization nr^2')
+
     args = parser.parse_args()
     main(**vars(args))
