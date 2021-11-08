@@ -97,7 +97,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   gamma_param = peos->GetGamma();
   // would need to change this if not cylindrical
-  inner_radius = pin->GetReal("mesh", "x1min");
+  // get minimum x1 grid location get inner radius
+  Real x1_min = pin->GetReal("mesh", "x1min");
+  inner_radius = pin->GetOrAddReal("problem", "radius", x1_min);
   m_p = pin->GetOrAddReal("problem", "m_p", 1.67E-27);
   Real omega = pin->GetOrAddReal("problem", "omega_sun", 2.87e-6);
   v1_inner = calc_v1_inner(pin);
