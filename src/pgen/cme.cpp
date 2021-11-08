@@ -153,7 +153,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // calculate normalized gravity potential
   if (sun_gravity) {
       GM_norm = calc_GM_sun(pin);
-      std::cout << GM_norm << " yo" << std::endl;
+      // std::cout << GM_norm << " yo" << std::endl;
   }
 
   // setup uniform ambient medium
@@ -213,14 +213,15 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           );
           phydro->u(IEN,k,j,i) = energy + v_contrib;
 
-          if (RELATIVISTIC_DYNAMICS) {
-            std::stringstream msg;
-            msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
-            << "can't handle RELATIVISTIC_DYNAMICS=" << RELATIVISTIC_DYNAMICS << std::endl;
-            ATHENA_ERROR(msg);
-          }
-          // if (RELATIVISTIC_DYNAMICS)  // this should only ever be SR with this file
+          // if (RELATIVISTIC_DYNAMICS) {
+          //   std::stringstream msg;
+          //   msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
+          //   << "can't handle RELATIVISTIC_DYNAMICS=" << RELATIVISTIC_DYNAMICS << std::endl;
+          //   ATHENA_ERROR(msg);
+          // }
+          // if (RELATIVISTIC_DYNAMICS) { // this should only ever be SR with this file
           //   phydro->u(IEN,k,j,i) += den;
+          // }
         }
       }
     }
