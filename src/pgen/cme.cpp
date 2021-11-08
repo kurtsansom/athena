@@ -188,20 +188,22 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         // ambient density and conserved variables
         phydro->u(IDN,k,j,i) = den;
         phydro->u(IM1,k,j,i) = phydro->u(IDN,k,j,i) * v1_inner;
+        phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner;
+        phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
 
         // currently assumes that inner velocities are given in same coordinate system
         // functions that generate values need to be functions if input
         // values need to be converted to correct coordinate system
-        if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-          phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner;
-          phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
-        } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-          phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad;
-          phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
-        } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad;
-          phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner * rad * std::sin(pcoord->x3v(k));
-        }
+        // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+        //   phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner;
+        //   phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
+        // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+        //   phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad;
+        //   phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
+        // } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+        //   phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner * rad;
+        //   phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad * std::sin(pcoord->x3v(k));
+        // }
 
         if (NON_BAROTROPIC_EOS) {
           // 0.5 * den *(v_r^2 + v_phi^2 + v_theta^2)
@@ -433,19 +435,21 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
 
         prim(IDN,k,j,il-gi) = den;
         prim(IVX,k,j,il-gi) = v1_inner;
+        prim(IVY,k,j,il-gi) = v2_inner;
+        prim(IVZ,k,j,il-gi) = v3_inner;
         // currently assumes that inner velocities are given in same coordinate system
         // functions that generate values need to be functions if input
         // values need to be converted to correct coordinate system
-        if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-          prim(IVY,k,j,il-gi) = v2_inner;
-          prim(IVZ,k,j,il-gi) = v3_inner;
-        } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-          prim(IVY,k,j,il-gi) = v2_inner * rad;
-          prim(IVZ,k,j,il-gi) = v3_inner;
-        } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          prim(IVY,k,j,il-gi) = v2_inner * rad;
-          prim(IVZ,k,j,il-gi) = v3_inner * rad * std::sin(pcoord->x3v(k));
-        }
+        // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+        //   prim(IVY,k,j,il-gi) = v2_inner;
+        //   prim(IVZ,k,j,il-gi) = v3_inner;
+        // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+        //   prim(IVY,k,j,il-gi) = v2_inner * rad;
+        //   prim(IVZ,k,j,il-gi) = v3_inner;
+        // } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+        //   prim(IVY,k,j,il-gi) = v2_inner * rad;
+        //   prim(IVZ,k,j,il-gi) = v3_inner * rad * std::sin(pcoord->x3v(k));
+        // }
 
         if (NON_BAROTROPIC_EOS) {
           prim(IPR,k,j,il-gi) = press;
@@ -462,8 +466,6 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
       for (int j=jl; j<=ju; ++j) {
 #pragma omp simd
         for (int gi=1; gi<=ngh; ++gi) {
-          // copy face-centered magnetic fields into ghost zones
-          // b.x1f(k,j,il-i) = b.x1f(k,j,il);
           if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
             x = pcoord->x1f(gi);
             y = pcoord->x2v(j);
@@ -494,8 +496,6 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
       for (int j=jl; j<=ju+1; ++j) {
 #pragma omp simd
         for (int gi=1; gi<=ngh; ++gi) {
-          // copy face-centered magnetic fields into ghost zones
-          // b.x2f(k,j,il-i) = b.x2f(k,j,il);
           if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
             x = pcoord->x1v(gi);
             y = pcoord->x2f(j);
@@ -525,23 +525,21 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
       for (int j=jl; j<=ju; ++j) {
 #pragma omp simd
         for (int gi=1; gi<=ngh; ++gi) {
-          // copy face-centered magnetic fields into ghost zones
-          // b.x3f(k,j,il-i) = b.x3f(k,j,il);
-          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-            x = pcoord->x1v(gi);
-            y = pcoord->x2v(j);
-            z = pcoord->x3f(k);
-          } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-            x = pcoord->x1v(gi)*std::cos(pcoord->x2v(j));
-            y = pcoord->x1v(gi)*std::sin(pcoord->x2v(j));
-            z = pcoord->x3f(k);
-          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-            x = pcoord->x1v(gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
-            y = pcoord->x1v(gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
-            z = pcoord->x1v(gi)*std::cos(pcoord->x2v(j)); 
-          }
+          // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+          //   x = pcoord->x1v(gi);
+          //   y = pcoord->x2v(j);
+          //   z = pcoord->x3f(k);
+          // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+          //   x = pcoord->x1v(gi)*std::cos(pcoord->x2v(j));
+          //   y = pcoord->x1v(gi)*std::sin(pcoord->x2v(j));
+          //   z = pcoord->x3f(k);
+          // } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+          //   x = pcoord->x1v(gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
+          //   y = pcoord->x1v(gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
+          //   z = pcoord->x1v(gi)*std::cos(pcoord->x2v(j)); 
+          // }
           // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
-          rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
+          // rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           b.x3f(k,j,il-gi) = b3;
           // if (rad >= inner_radius) {
           //   b.x3f(k,j,il-gi) *= 1.0;
