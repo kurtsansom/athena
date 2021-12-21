@@ -66,8 +66,8 @@ Real threshold;
 Real v1_inner, v2_inner, v3_inner;
 Real n_inner, e_inner;
 Real inner_radius, gamma_param;
-Real r_measure;
-Real m_p;
+// Real r_measure;
+// Real m_p;
 Real b1, b2, b3;
 Real x_0, y_0, z_0;
 Real GM_norm;
@@ -110,8 +110,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // get minimum x1 grid location get inner radius
   Real x1_min = pin->GetReal("mesh", "x1min");
   inner_radius = pin->GetOrAddReal("problem", "radius", x1_min);
-  r_measure = pin->GetOrAddReal("problem", "r_measure", 1.0);
-  m_p = pin->GetOrAddReal("problem", "m_p", 1.67E-27);
+  // r_measure = pin->GetOrAddReal("problem", "r_measure", 1.0);
+  // m_p = pin->GetOrAddReal("problem", "m_p", 1.67E-27);
   // Real omega = pin->GetOrAddReal("problem", "omega_sun", 2.87e-6);
   //assume orbital_advection is enabled
   // Real omega = pin->GetReal("orbital_advection", "Omega0");
