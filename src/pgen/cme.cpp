@@ -53,7 +53,7 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
 Real calc_v_radial_inner(ParameterInput *pin);
 Real calc_GM_sun(ParameterInput *pin);
 Real calc_b_radial_inner(ParameterInput *pin);
-Real calc_b_azimuthal_inner(ParameterInput *pin, Real b1, Real v1_inner);
+Real calc_b_azimuthal_inner(ParameterInput *pin, Real _b1, Real _v1_inner);
 Real calc_n_inner(ParameterInput *pin, Real v1_inner);
 Real calc_energy_inner(ParameterInput *pin, Real n_inner, Real gamma);
 
@@ -62,6 +62,7 @@ int RefinementCondition(MeshBlock *pmb);
 // namespaced variables, i.e. globals
 // should be turned into a class with setters and getters
 namespace {
+
 Real threshold;
 Real v1_inner, v2_inner, v3_inner;
 Real n_inner, e_inner;
@@ -72,6 +73,7 @@ Real b1, b2, b3;
 Real x_0, y_0, z_0;
 Real GM_norm;
 bool sun_gravity;
+
 } // namespace
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
@@ -244,6 +246,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
   // initialize interface B and total energy
   if (MAGNETIC_FIELDS_ENABLED) {
+    Real polar_dependence = 1.0;
     // b.x1f
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je; ++j) {
@@ -287,7 +290,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
             x = pcoord->x1v(i)*std::sin(pcoord->x2f(j))*std::cos(pcoord->x3v(k));
             y = pcoord->x1v(i)*std::sin(pcoord->x2f(j))*std::sin(pcoord->x3v(k));
-            z = pcoord->x1v(i)*std::cos(pcoord->x2f(j)); 
+            z = pcoord->x1v(i)*std::cos(pcoord->x2f(j));
           }
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           pfield->b.x2f(k,j,i) = b2;
@@ -312,12 +315,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
             x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
             y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
-            z = pcoord->x1v(i)*std::cos(pcoord->x2v(j)); 
+            z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            polar_dependence = std::sin(pcoord->x2v(j));
           }
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           pfield->b.x3f(k,j,i) = b3;
           if (rad >= inner_radius) {
-            pfield->b.x3f(k,j,i) *= (inner_radius/rad);;
+            pfield->b.x3f(k,j,i) *= (inner_radius/rad)*polar_dependence;
           }
         }
       }
@@ -472,6 +476,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
 
   // set magnetic field in inlet ghost zones
   if (MAGNETIC_FIELDS_ENABLED) {
+    Real polar_dependence = 1.0;
     // std::cout << "x1f" << std::endl;
     // x1 direction , use volume centered for x2 and x3
     for (int k=kl; k<=ku; ++k) {
@@ -550,13 +555,14 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
           } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
             x = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
             y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
-            z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j)); 
+            z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j));
+            polar_dependence = std::sin(pcoord->x2v(j)); 
           }
           // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           b.x3f(k,j,il-gi) = b3;
           if (rad >= inner_radius) {
-            b.x3f(k,j,il-gi) *= (inner_radius/rad);
+            b.x3f(k,j,il-gi) *= (inner_radius/rad)*polar_dependence;
           }
         }
       }
@@ -726,7 +732,7 @@ Real calc_b_radial_inner(ParameterInput *pin) {
 }
 
 // convert b2 magnetic field to inner boundary 
-Real calc_b_azimuthal_inner(ParameterInput *pin, Real _b1, Real v1_inner) {
+Real calc_b_azimuthal_inner(ParameterInput *pin, Real _b1, Real _v1_inner) {
   Real min_radius = pin->GetReal("mesh", "x1min");
   // Real omega = pin->GetReal("orbital_advection", "Omega0");
   Real omega = pin->GetReal("problem", "omega_sun");
