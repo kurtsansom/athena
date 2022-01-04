@@ -50,10 +50,10 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
               AthenaArray<Real> &cons_scalar);
 
-Real calc_v1_inner(ParameterInput *pin);
+Real calc_v_radial_inner(ParameterInput *pin);
 Real calc_GM_sun(ParameterInput *pin);
-Real calc_b1_inner(ParameterInput *pin);
-Real calc_b2_inner(ParameterInput *pin, Real b1, Real v1_inner);
+Real calc_b_radial_inner(ParameterInput *pin);
+Real calc_b_azimuthal_inner(ParameterInput *pin, Real b1, Real v1_inner);
 Real calc_n_inner(ParameterInput *pin, Real v1_inner);
 Real calc_energy_inner(ParameterInput *pin, Real n_inner, Real gamma);
 
@@ -115,16 +115,19 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // Real omega = pin->GetOrAddReal("problem", "omega_sun", 2.87e-6);
   //assume orbital_advection is enabled
   // Real omega = pin->GetReal("orbital_advection", "Omega0");
-  v1_inner = calc_v1_inner(pin);
-  v2_inner = 0.0; //-omega; //omega; // create calc for v2 and v3
+  // TODO need to make it clear the coordinate systems and inputs
+  v1_inner = calc_v_radial_inner(pin);
+  v2_inner = 0.0; // create calc for v2 and v3 when orbital advection is off
   v3_inner = 0.0;
-  b1 = calc_b1_inner(pin);
-  b2 = calc_b2_inner(pin, b1, v1_inner);
-  b3 = 0.0;
   n_inner = calc_n_inner(pin, v1_inner);
   e_inner = calc_energy_inner(pin, n_inner, gamma_param);
 
-  Real b0; //, angle;
+  // defaults
+  b1 = calc_b_radial_inner(pin);
+  b2 = calc_b_azimuthal_inner(pin, b1, v1_inner);
+  b3 = 0.0;
+
+  // Real b0; //, angle;
   // if (MAGNETIC_FIELDS_ENABLED) {
   //   b0 = pin->GetReal("problem", "b0");
   //   angle = (PI/180.0)*pin->GetReal("problem", "angle");
@@ -143,10 +146,14 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     x_0 = x1_0*std::cos(x2_0);
     y_0 = x1_0*std::sin(x2_0);
     z_0 = x3_0;
+    b2 = calc_b_azimuthal_inner(pin, b1, v1_inner);
+    b3 = 0.0; // z direction is zero
   } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
     x_0 = x1_0*std::sin(x2_0)*std::cos(x3_0);
     y_0 = x1_0*std::sin(x2_0)*std::sin(x3_0);
     z_0 = x1_0*std::cos(x2_0);
+    b2 = 0.0; // polar is zero 
+    b3 = calc_b_azimuthal_inner(pin, b1, v1_inner);
   } else {
     // Only check legality of COORDINATE_SYSTEM once in this function
     std::stringstream msg;
@@ -204,7 +211,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad;
           phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner;
         } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          // v2 is polar, and v3 is azimuthal
+          // v2_inner is polar and v3_inner is azimuthal
           phydro->u(IM2,k,j,i) = phydro->u(IDN,k,j,i) * v2_inner * rad;
           phydro->u(IM3,k,j,i) = phydro->u(IDN,k,j,i) * v3_inner * rad * std::sin(pcoord->x2v(k));
         }
@@ -294,24 +301,24 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int k=ks; k<=ke+1; ++k) {
       for (int j=js; j<=je; ++j) {
         for (int i=is; i<=ie; ++i) {
-          // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-          //   x = pcoord->x1v(i);
-          //   y = pcoord->x2v(j);
-          //   z = pcoord->x3f(k);
-          // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-          //   x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
-          //   y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
-          //   z = pcoord->x3f(k);
-          // } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          //   x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
-          //   y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
-          //   z = pcoord->x1v(i)*std::cos(pcoord->x2v(j)); 
-          // }
-          // rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
+          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+            x = pcoord->x1v(i);
+            y = pcoord->x2v(j);
+            z = pcoord->x3f(k);
+          } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            x = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
+            y = pcoord->x1v(i)*std::sin(pcoord->x2v(j));
+            z = pcoord->x3f(k);
+          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+            x = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
+            y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
+            z = pcoord->x1v(i)*std::cos(pcoord->x2v(j)); 
+          }
+          rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           pfield->b.x3f(k,j,i) = b3;
-          // if (rad >= inner_radius) {
-          //   pfield->b.x3f(k,j,i) *= 1.0;
-          // }
+          if (rad >= inner_radius) {
+            pfield->b.x3f(k,j,i) *= (inner_radius/rad);;
+          }
         }
       }
     }
@@ -532,25 +539,25 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
       for (int j=jl; j<=ju; ++j) {
 #pragma omp simd
         for (int gi=1; gi<=ngh; ++gi) {
-          // if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
-          //   x = pcoord->x1v(il-gi);
-          //   y = pcoord->x2v(j);
-          //   z = pcoord->x3f(k);
-          // } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-          //   x = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j));
-          //   y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j));
-          //   z = pcoord->x3f(k);
-          // } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          //   x = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
-          //   y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
-          //   z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j)); 
-          // }
-          // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
-          // rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
+          if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+            x = pcoord->x1v(il-gi);
+            y = pcoord->x2v(j);
+            z = pcoord->x3f(k);
+          } else if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
+            x = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j));
+            y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j));
+            z = pcoord->x3f(k);
+          } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
+            x = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
+            y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
+            z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j)); 
+          }
+          std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
+          rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           b.x3f(k,j,il-gi) = b3;
-          // if (rad >= inner_radius) {
-          //   b.x3f(k,j,il-gi) *= 1.0;
-          // }
+          if (rad >= inner_radius) {
+            b.x3f(k,j,il-gi) *= (inner_radius/rad);
+          }
         }
       }
     }
@@ -688,7 +695,7 @@ Real calc_GM_sun(ParameterInput *pin) {
 
 // convert velocity to inner boundary velocity
 // empirical formulation
-Real calc_v1_inner(ParameterInput *pin) {
+Real calc_v_radial_inner(ParameterInput *pin) {
   Real v_measure = pin->GetReal("problem", "v_measure");
   Real v_measure_extra = pin->GetOrAddReal("problem", "v_measure_extra", 1.0);
   Real vo = pin->GetReal("problem", "vo");
@@ -699,8 +706,8 @@ Real calc_v1_inner(ParameterInput *pin) {
   return v_in;
 }
 
-// convert b1 magnetic field to inner boundary 
-Real calc_b1_inner(ParameterInput *pin) {
+// convert b_radial magnetic field to inner boundary 
+Real calc_b_radial_inner(ParameterInput *pin) {
   Real min_radius = pin->GetReal("mesh", "x1min");
   Real r_meas = pin->GetReal("problem", "r_measure");
   Real v_measure = pin->GetReal("problem", "v_measure");
@@ -719,7 +726,7 @@ Real calc_b1_inner(ParameterInput *pin) {
 }
 
 // convert b2 magnetic field to inner boundary 
-Real calc_b2_inner(ParameterInput *pin, Real _b1, Real v1_inner) {
+Real calc_b_azimuthal_inner(ParameterInput *pin, Real _b1, Real v1_inner) {
   Real min_radius = pin->GetReal("mesh", "x1min");
   // Real omega = pin->GetReal("orbital_advection", "Omega0");
   Real omega = pin->GetReal("problem", "omega_sun");
@@ -728,8 +735,8 @@ Real calc_b2_inner(ParameterInput *pin, Real _b1, Real v1_inner) {
   Real b_extra = pin->GetOrAddReal("problem", "b_measure_extra", 1.0);
 
   Real ratio_inner = omega * AU * min_radius / v1_inner / vo;
-  Real _b2 = -1.0* _b1 * ratio_inner * b_extra;
-  return _b2;
+  Real _b_az = -1.0* _b1 * ratio_inner * b_extra;
+  return _b_az;
 }
 
 // convert density to inner boundary 
