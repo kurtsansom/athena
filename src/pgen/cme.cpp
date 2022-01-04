@@ -552,7 +552,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
             y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
             z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j)); 
           }
-          std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
+          // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
           b.x3f(k,j,il-gi) = b3;
           if (rad >= inner_radius) {
