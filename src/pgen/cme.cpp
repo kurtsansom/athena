@@ -33,6 +33,15 @@
 #include "../mesh/mesh.hpp"
 #include "../parameter_input.hpp"
 
+// add suns gravity as source term
+void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+              AthenaArray<Real> &cons_scalar);
+
+// user defined time step function
+Real SetMinimumTimeStep(MeshBlock *pmb);
+
 // User-defined boundary conditions
 // radial in cylindrical coords
 void CMEInnerX1(MeshBlock *pmb, Coordinates *pco,
@@ -45,11 +54,7 @@ void CMEOuterX1(MeshBlock *pmb, Coordinates *pco,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
-void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
-              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-              AthenaArray<Real> &cons_scalar);
-
+// helper functions
 Real calc_v_radial_inner(ParameterInput *pin);
 Real calc_GM_sun(ParameterInput *pin);
 Real calc_b_radial_inner(ParameterInput *pin);
@@ -73,14 +78,32 @@ Real b1, b2, b3;
 Real x_0, y_0, z_0;
 Real GM_norm;
 bool sun_gravity;
-
+bool enable_user_dt;
+Real user_dt;
+Real wave_rad;
+Real wave_mult;
 } // namespace
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
+
+  // Enroll user-defined physical source terms
+  // external gravitational potential
+  sun_gravity = pin->GetOrAddBoolean("problem", "enable_gravity",false);
+  if (sun_gravity) {
+    EnrollUserExplicitSourceFunction(SunGravity);
+  }
+
+  // enroll user defined timestep
+  enable_user_dt = pin->GetOrAddBoolean("problem", "enable_user_dt",false);
+  if (enable_user_dt) {
+    EnrollUserTimeStepFunction(SetMinimumTimeStep);
+  }
+
   // if (adaptive) {
   //   EnrollUserRefinementCondition(RefinementCondition);
   //   threshold = pin->GetReal("problem","thr");
   // }
+
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, CMEInnerX1);
@@ -90,13 +113,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, CMEOuterX1);
   }
 
-  // Enroll user-defined physical source terms
-  // external gravitational potential
-  sun_gravity = pin->GetOrAddBoolean("problem", "enable_gravity",false);
-  if (sun_gravity) {
-    EnrollUserExplicitSourceFunction(SunGravity);
-  }
-  
   return;
 }
 
@@ -169,6 +185,14 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       GM_norm = calc_GM_sun(pin);
       // std::cout << GM_norm << " yo" << std::endl;
   }
+
+  if (enable_user_dt) {
+    user_dt = pin->GetOrAddReal("problem", "user_dt", 0.01);
+  }
+
+  // oscillation of current sheet
+  wave_rad = pin->GetOrAddReal("problem", "wave_rad", 0.0);
+  wave_mult = pin->GetOrAddReal("problem", "wave_mult", 0.0);
 
   // setup uniform ambient medium
   // Modifies density, and energy (non-barotropic eos and relativistic dynamics)
@@ -247,6 +271,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   // initialize interface B and total energy
   if (MAGNETIC_FIELDS_ENABLED) {
     Real polar_dependence = 1.0;
+    Real sign = 1.0;
     // b.x1f
     for (int k=ks; k<=ke; ++k) {
       for (int j=js; j<=je; ++j) {
@@ -262,12 +287,13 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
           } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
             x = pcoord->x1f(i)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
             y = pcoord->x1f(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
-            z = pcoord->x1f(i)*std::cos(pcoord->x2v(j)); 
+            z = pcoord->x1f(i)*std::cos(pcoord->x2v(j));
+            sign = std::copysign(1.0, std::cos(pcoord->x2v(j) + wave_rad*std::cos(wave_mult*pcoord->x3v(k))));
           }
 
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
 
-          pfield->b.x1f(k,j,i) = b1;
+          pfield->b.x1f(k,j,i) = b1*sign;
           if (rad >= inner_radius) {
             pfield->b.x1f(k,j,i) *= pow(inner_radius/rad, 2.0);
           }
@@ -317,11 +343,12 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
             y = pcoord->x1v(i)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
             z = pcoord->x1v(i)*std::cos(pcoord->x2v(j));
             polar_dependence = std::sin(pcoord->x2v(j));
+            // sign = -1.0*std::copysign(1.0, std::cos(pcoord->x2v(j) + wave_rad*std::cos(wave_mult*pcoord->x3v(k))));
           }
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
-          pfield->b.x3f(k,j,i) = b3;
+          pfield->b.x3f(k,j,i) = b3*polar_dependence; //*sign;
           if (rad >= inner_radius) {
-            pfield->b.x3f(k,j,i) *= (inner_radius/rad)*polar_dependence;
+            pfield->b.x3f(k,j,i) *= (inner_radius/rad);
           }
         }
       }
@@ -410,6 +437,11 @@ void SunGravity(MeshBlock *pmb, const Real time, const Real dt,
   return;
 }
 
+Real SetMinimumTimeStep(MeshBlock *pmb)
+{
+  return user_dt;
+}
+
 //! User-defined boundary Conditions: sets solution in ghost zones to initial values
 void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
                  AthenaArray<Real> &prim, FaceField &b,
@@ -477,6 +509,7 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
   // set magnetic field in inlet ghost zones
   if (MAGNETIC_FIELDS_ENABLED) {
     Real polar_dependence = 1.0;
+    Real sign = 1.0;
     // std::cout << "x1f" << std::endl;
     // x1 direction , use volume centered for x2 and x3
     for (int k=kl; k<=ku; ++k) {
@@ -496,12 +529,13 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
           } else { //if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
             x = pcoord->x1f(il-gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3v(k));
             y = pcoord->x1f(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3v(k));
-            z = pcoord->x1f(il-gi)*std::cos(pcoord->x2v(j)); 
+            z = pcoord->x1f(il-gi)*std::cos(pcoord->x2v(j));
+            sign = std::copysign(1.0, std::cos(pcoord->x2v(j) + wave_rad*std::cos(wave_mult*pcoord->x3v(k))));
           }
           
           // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
-          b.x1f(k,j,il-gi) = b1;
+          b.x1f(k,j,il-gi) = b1*sign;
           if (rad >= inner_radius) {
             b.x1f(k,j,il-gi) *= SQR((inner_radius/rad));
           }
@@ -556,13 +590,14 @@ void CMEInnerX1(MeshBlock *pmb, Coordinates *pcoord,
             x = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::cos(pcoord->x3f(k));
             y = pcoord->x1v(il-gi)*std::sin(pcoord->x2v(j))*std::sin(pcoord->x3f(k));
             z = pcoord->x1v(il-gi)*std::cos(pcoord->x2v(j));
-            polar_dependence = std::sin(pcoord->x2v(j)); 
+            polar_dependence = std::sin(pcoord->x2v(j));
+            // sign = -1.0*std::copysign(1.0, std::cos(pcoord->x2v(j) + wave_rad*std::cos(wave_mult*pcoord->x3v(k))));
           }
           // std::cout << "x: " << x << " y: " << y << " z: " << z << std::endl;
           rad = std::sqrt(SQR(x - x_0) + SQR(y - y_0) + SQR(z - z_0));
-          b.x3f(k,j,il-gi) = b3;
+          b.x3f(k,j,il-gi) = b3*polar_dependence; //*sign;
           if (rad >= inner_radius) {
-            b.x3f(k,j,il-gi) *= (inner_radius/rad)*polar_dependence;
+            b.x3f(k,j,il-gi) *= (inner_radius/rad);
           }
         }
       }
