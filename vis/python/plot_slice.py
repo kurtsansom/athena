@@ -95,6 +95,14 @@ def main(**kwargs):
         data[kwargs['quantity']]= data[kwargs['quantity']][min_idx[0]:max_idx[0],
                                        min_idx[1]:max_idx[1],
                                        min_idx[2]:max_idx[2]]
+
+        for i in range(1,4):
+            key_ = kwargs['stream'] + str(i)
+            if key_ in data.keys():
+                data[key_]= data[key_][min_idx[0]:max_idx[0],
+                                       min_idx[1]:max_idx[1],
+                                       min_idx[2]:max_idx[2]]
+
         # face values are one larger
         data['x1f'] = data['x1f'][min_idx[2]:max_idx[2]+1]
         data['x1v'] = data['x1v'][min_idx[2]:max_idx[2]]
@@ -200,7 +208,7 @@ def main(**kwargs):
             if kwargs['density_norm'] and kwargs['quantity'] in ["rho", "dens"]:
                 print(vals.shape, xv.shape)
                 # vals = vals * xv**2
-                vals = vals / (vals.T * xv[:, None]**2).T
+                vals = (vals.T * xv[:, None]**2).T
 
 
     # Extract vector data
@@ -259,6 +267,7 @@ def main(**kwargs):
         im = ax.pcolormesh(y_grid, x_grid, vals, cmap=kwargs['colormap'], norm=norm)
         ax.set_rorigin(-x_grid.min())
         ax.grid(True)
+        ax.plot(np.linspace(0, 2 * np.pi, 360), [1.0] * 360, 'k', linewidth=2.0)
     else:
         im = ax.pcolormesh(x_grid, y_grid, vals, cmap=kwargs['colormap'], norm=norm)
 

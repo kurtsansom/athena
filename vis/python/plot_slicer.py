@@ -136,5 +136,11 @@ if __name__ == '__main__':
                         type=int,
                         default=0,
                         help=('Include number of ghost cells in each direction'))
+    parser.add_argument('--exclude_ghost',
+                        action='store_true',
+                        help='Exclude ghost cells from plot')
+    parser.add_argument('--density_norm',
+                        action='store_true',
+                        help='enable density normalization nr^2')
     args = parser.parse_args()
     many_slices(args)
