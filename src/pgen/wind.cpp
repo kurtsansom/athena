@@ -3,13 +3,12 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file cme.cpp
-//! \brief Problem generator for spherical cme wave problem.  Works in Cartesian,
-//!        cylindrical, and spherical coordinates.  Contains post-processing code
-//!        to check whether cme is spherical for regression tests
-//!
-//! REFERENCE: P. Londrillo & L. Del Zanna, "High-order upwind schemes for
-//!   multidimensional MHD", ApJ, 530, 508 (2000), and references therein.
+//! \file wind.cpp
+//! \brief Problem generator for spherical wind problem.  Works in 2D Cylindrical,
+//!        and 3D polar spherical coordinates. It is partially setup to  run in 
+//!        cartesian coordinates, but this requires adding rotating system source terms 
+//!        that will work in cartesian coordinates.
+
 
 // C headers
 
@@ -118,7 +117,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
 //========================================================================================
 //! \fn void MeshBlock::ProblemGenerator(ParameterInput *pin)
-//! \brief Spherical cme wave test problem generator
+//! \brief Solar wind test problem generator
 //========================================================================================
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
@@ -175,7 +174,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   } else {
     // Only check legality of COORDINATE_SYSTEM once in this function
     std::stringstream msg;
-    msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
+    msg << "### FATAL ERROR in wind.cpp ProblemGenerator" << std::endl
         << "Unrecognized COORDINATE_SYSTEM=" << COORDINATE_SYSTEM << std::endl;
     ATHENA_ERROR(msg);
   }
@@ -256,7 +255,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 
           if (RELATIVISTIC_DYNAMICS) {
             std::stringstream msg;
-            msg << "### FATAL ERROR in cme.cpp ProblemGenerator" << std::endl
+            msg << "### FATAL ERROR in wind.cpp ProblemGenerator" << std::endl
             << "can't handle RELATIVISTIC_DYNAMICS=" << RELATIVISTIC_DYNAMICS << std::endl;
             ATHENA_ERROR(msg);
           }
